@@ -36,9 +36,9 @@ def load_data():
         print("📁 Cargando datos...")
             
         # Cargar archivos
-        people_df = pd.read_csv('../data/people.csv')
-        salary_df = pd.read_csv('../data/salary.csv')
-        descriptions_df = pd.read_csv('../data/descriptions.csv')
+        people_df = pd.read_csv('../../dataO/people.csv')
+        salary_df = pd.read_csv('../../dataO/salary.csv')
+        descriptions_df = pd.read_csv('../../dataO/descriptions.csv')
             
         # Combinar por ID
         data = people_df.merge(salary_df, on='id', how='inner')
