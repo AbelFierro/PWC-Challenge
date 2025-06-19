@@ -2,6 +2,48 @@ import funciones_lgbm as f_lgbm
 import pandas as pd
 
 
+#===============================================
+
+
+def calculate_groups(age, years_of_experience, grouping_info=None):
+    """
+    Calcula Age_group y Exp_group automáticamente
+    """
+    # Configuración por defecto si no hay grouping_info
+    default_age_bins = [22, 32, 38, 46, float('inf')]
+    default_age_labels = ['Joven', 'Adulto_Joven', 'Adulto_Medio', 'Senior']
+    
+    default_exp_bins = [0, 5, 15, float('inf')]
+    default_exp_labels = ['Junior', 'Medio', 'Senior']
+    
+    # Usar configuración del modelo si está disponible
+    if grouping_info:
+        age_bins = grouping_info.get('age_bins', default_age_bins)
+        age_labels = grouping_info.get('age_labels', default_age_labels)
+        exp_bins = grouping_info.get('exp_bins', default_exp_bins)
+        exp_labels = grouping_info.get('exp_labels', default_exp_labels)
+    else:
+        age_bins = default_age_bins
+        age_labels = default_age_labels
+        exp_bins = default_exp_bins
+        exp_labels = default_exp_labels
+    
+    # Calcular Age_group
+    age_group = age_labels[-1]  # Por defecto el último grupo
+    for i in range(len(age_bins) - 1):
+        if age_bins[i] <= age < age_bins[i + 1]:
+            age_group = age_labels[i]
+            break
+    
+    # Calcular Exp_group
+    exp_group = exp_labels[-1]  # Por defecto el último grupo
+    for i in range(len(exp_bins) - 1):
+        if exp_bins[i] <= years_of_experience < exp_bins[i + 1]:
+            exp_group = exp_labels[i]
+            break
+    
+    return exp_group, age_group
+
 
 #===============================================
 
