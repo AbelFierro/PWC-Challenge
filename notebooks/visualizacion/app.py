@@ -1,3 +1,5 @@
+#codestrike
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -51,7 +53,7 @@ except ImportError as e:
 
 # Configuración de la página
 st.set_page_config(
-    page_title="💰 Predictor de Salarios Avanzado",
+    page_title="💰 Predictor de Salarios",
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -203,6 +205,7 @@ def load_model_from_path(file_path):
         return None
 
 def display_model_info(model_package):
+    
     """Mostrar información del modelo"""
     st.sidebar.markdown("### 📊 Información del Modelo")
     
@@ -279,6 +282,7 @@ def show_grouping_rules(model_package):
                 st.write("• **Senior:** 15+ años")
 
 def create_user_input_form():
+    
     """Crear formulario de entrada"""
     st.markdown("## 📝 Datos para la Predicción")
     
@@ -407,7 +411,7 @@ def show_profile_analysis(user_data, model_package):
 
 def main():
     # Título principal
-    st.markdown('<h1 class="main-header">💰 Predictor de Salarios Avanzado</h1>', 
+    st.markdown('<h1 class="main-header">💰 Predictor de Salarios</h1>', 
                 unsafe_allow_html=True)
     
     # Session state
@@ -456,9 +460,7 @@ def main():
     # Contenido principal
     if not st.session_state.model_package:
         st.markdown("""
-        ## 👋 Bienvenido al Predictor de Salarios Avanzado
-        
-        Esta aplicación utiliza machine learning avanzado para predecir salarios basándose en:
+        ## 👋 Bienvenido al Predictor de Salarios
         
         - 📊 **92+ características** técnicas y estadísticas
         - 🎯 **Modelo LightGBM** optimizado con Optuna

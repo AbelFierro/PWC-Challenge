@@ -252,44 +252,9 @@ def get_all_categories(train_data):
 
 
 
-#####funcion a predictt
 
-def apply_grouping_to_new_data(new_age, new_experience, grouping_info):
-    """
-    Aplicar la agrupación a un nuevo registro usando los rangos guardados
-    """
-    
-    # ============= APLICAR EXP_GROUP =============
-    exp_bins = grouping_info['exp_bins']
-    exp_labels = grouping_info['exp_labels']
-    
-    # Determinar grupo de experiencia
-    if new_experience <= exp_bins[1]:  # 0-5
-        exp_group = exp_labels[0]  # 'Junior'
-    elif new_experience <= exp_bins[2]:  # 5-15
-        exp_group = exp_labels[1]  # 'Medio'
-    else:  # 15+
-        exp_group = exp_labels[2]  # 'Senior'
-    
-    # ============= APLICAR AGE_GROUP =============
-    age_bins = grouping_info['age_bins']
-    age_labels = grouping_info['age_labels']
-    
-    # Determinar grupo de edad usando los bins calculados
-    age_group = None
-    for i in range(len(age_bins) - 1):
-        if age_bins[i] <= new_age <= age_bins[i + 1]:
-            age_group = age_labels[i]
-            break
-    
-    # Manejar casos extremos
-    if age_group is None:
-        if new_age < age_bins[0]:
-            age_group = age_labels[0]  # Más joven que el rango
-        elif new_age > age_bins[-1]:
-            age_group = age_labels[-1]  # Más viejo que el rango
-    
-    return exp_group, age_group
+
+
 
 
 ########################################################################################################
