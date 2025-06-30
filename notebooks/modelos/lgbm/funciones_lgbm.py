@@ -243,20 +243,6 @@ def get_all_categories(train_data):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ########################################################################################################
 
 ##################     Funciones de FE       ###########################################################
@@ -276,7 +262,7 @@ def create_features(data, all_job_categories=None, all_seniority_levels=None):
     - all_job_categories: lista de todas las categorías posibles (para consistencia)
     - all_seniority_levels: lista de todos los niveles de seniority posibles
     """
-    print("🔧 Creando todas las características mejoradas...")
+    print("🔧 Creando todas las características ...")
     
     features = pd.DataFrame()
     
@@ -606,7 +592,7 @@ def create_statistical_features(data, stats_dict=None, is_training=True):
             job_category_stats.columns = [f"job_cat_{col[0]}_{col[1]}" for col in job_category_stats.columns]
             stats_dict['job_category_stats'] = job_category_stats.to_dict('index')
         
-        # ESTADÍSTICAS GLOBALES (solo variables disponibles en producción)
+        # ESTADÍSTICAS GLOBALES 
         global_stats = {
             'age_global_mean': data['Age'].mean(),
             'age_global_std': data['Age'].std(),
@@ -855,7 +841,7 @@ def create_features_with_stats(data, all_job_categories=None, all_seniority_leve
     print(f"✅ Features totales para producción: {len(combined_feature_names)}")
     print(f"   - Originales: {len(feature_names)}")
     print(f"   - Estadísticos: {len(stat_features.columns)}")
-    print(f"   ✅ Todas las features son seguras para producción (sin target leakage)")
+    
     
     if is_training:
         return combined_features, combined_feature_names, stats_dict

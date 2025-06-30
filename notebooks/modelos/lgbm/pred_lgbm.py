@@ -240,12 +240,12 @@ def create_statistical_features_pred(data, stats_dict):
         features['exp_rank_in_gender'] = 0.5
         features['exp_rank_in_edu_gender'] = 0.5
     
-    # Features de consistencia (usar valores por defecto)
+    
     age_comparison_features = [col for col in features.columns if 'age_vs_' in col]
     exp_comparison_features = [col for col in features.columns if 'exp_vs_' in col]
     
     if age_comparison_features:
-        # Calcular desviación estándar de las comparaciones como medida de consistencia
+        
         features['age_consistency_score'] = features[age_comparison_features].std(axis=1)
     else:
         features['age_consistency_score'] = 0
@@ -288,65 +288,13 @@ def create_features_with_stats_pred(data, all_job_categories, all_seniority_leve
     
     return combined_features, combined_feature_names
 
-"""
-def predict(new_data, model_package):
 
-    print("🎯 Predicción con modelo completo (un solo registro)...")
-    
-    # Verificar que el modelo tiene features estadísticos
-    if not model_package.get('has_statistical_features', False):
-        print("⚠️  Este modelo no tiene features estadísticos")
-        # Usar función de predicción estándar
-        return predict_salary_standard(new_data, model_package)
-    
-    # Verificar dimensiones esperadas
-    expected_features = model_package['total_features']
-    print(f"   🔢 Features esperadas: {expected_features}")
-    
-    # Crear features usando la versión adaptada para un solo registro
-    X_new, feature_names = create_features_with_stats_pred(
-        new_data,
-        all_job_categories=model_package['job_categories'],
-        all_seniority_levels=model_package['seniority_categories'],
-        stats_dict=model_package['stats_dict']
-    )
-    
-    print(f"   🔢 Features generadas: {len(feature_names)}")
-    
-    # Verificar dimensiones
-    if len(feature_names) != expected_features:
-        print(f"   ⚠️  Ajustando dimensiones: {len(feature_names)} → {expected_features}")
-        
-        # Alinear con features del modelo
-        model_feature_names = model_package['feature_names']
-        X_aligned = pd.DataFrame(0, index=X_new.index, columns=model_feature_names)
-        
-        # Llenar con los valores disponibles
-        for col in X_new.columns:
-            if col in X_aligned.columns:
-                X_aligned[col] = X_new[col]
-        
-        X_new = X_aligned
-        print(f"   ✅ Dimensiones alineadas: {X_new.shape}")
-    
-    # Predecir
-    model = model_package['model']
-    prediction = model.predict(X_new)[0]
-    
-    print(f"   💰 Predicción: ${prediction:,.2f}")
-    print(f"   ✅ Predicción exitosa con {X_new.shape[1]} features")
-    
-    return prediction
-    
-"""
-
-# funcion cambiada para ensamble
 
 def predict(new_data, model_package):
     """
-    Función de predicción CORREGIDA que maneja automáticamente:
-    - Modelos normales (usando pred.predict original)
-    - Ensembles (usando lógica especial)
+    Función de predicción:
+    - Modelo optimizado 
+    - Ensembles 
     """
     print("🎯 Predicción con detección automática de tipo de modelo...")
     
@@ -466,13 +414,10 @@ def predict(new_data, model_package):
             print(f"❌ Error: El objeto no tiene método 'predict'. Tipo: {type(actual_model)}")
             return None
         
-        # USAR LÓGICA ORIGINAL DE pred.predict()
         
         # Verificar que el modelo tiene features estadísticos
         if not model_package.get('has_statistical_features', False):
             print("⚠️  Este modelo no tiene features estadísticos")
-            # Aquí podrías llamar a una función de predicción más simple si existe
-            # return predict_salary_standard(new_data, model_package)
             print("❌ Función predict_salary_standard no implementada")
             return None
         
@@ -484,7 +429,7 @@ def predict(new_data, model_package):
             
         print(f"   🔢 Features esperadas: {expected_features}")
         
-        # Crear features usando la versión adaptada para un solo registro
+        # Crear features usando la versión para un solo registro
         try:
             X_new, feature_names = create_features_with_stats_pred(
                 new_data,
