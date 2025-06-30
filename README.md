@@ -1,6 +1,12 @@
-PWC - PREDICCIÓN DE SALARIOS
+# **PWC - Predicción de Salarios**
 
-dataO: archivos originales.
-dataC: archivo generado luego del etl.
-modelos: modelos guardados para cargar desde la app.
-notebooks
+## 📄 Descripción
+
+Este repositorio contiene el desarrollo para la predicción de salarios (PWC).
+
+## 🗂️ Estructura de carpetas
+
+- **dataO**: archivos originales.
+- **dataC**: archivos generados luego del ETL.
+- **modelos**: modelos guardados para cargar desde la app.
+- **notebooks**: notebooks de exploración y desarrollo.
