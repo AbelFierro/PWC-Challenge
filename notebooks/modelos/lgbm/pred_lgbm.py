@@ -288,14 +288,13 @@ def create_features_with_stats_pred(data, all_job_categories, all_seniority_leve
     
     return combined_features, combined_feature_names
 
-
+"""
 
 def predict(new_data, model_package):
-    """
+    
     Función de predicción:
     - Modelo optimizado 
-    - Ensembles 
-    """
+    
     print("🎯 Predicción con detección automática de tipo de modelo...")
     
     
@@ -475,3 +474,294 @@ def predict(new_data, model_package):
         except Exception as e:
             print(f"❌ Error en predicción del modelo: {e}")
             return None
+    # Este es el predict antes del ultimo ensamble
+            
+"""             
+
+
+def predict(new_data, model_package):
+    """
+    Función de predicción:
+    - Modelo optimizado 
+    - Ensembles (voting, stacking, y group_voting)
+    """
+    print("🎯 Predicción con detección automática de tipo de modelo...")
+    
+    print("🔍 === DEBUG COMPLETO ===")
+    print(f"🔍 Claves en model_package: {list(model_package.keys())}")
+    print(f"🔍 is_ensemble: {model_package.get('is_ensemble')}")
+    print(f"🔍 Tipo de model_package['model']: {type(model_package['model'])}")
+    
+    # Si es dict, mostrar contenido
+    if isinstance(model_package.get('model'), dict):
+        print(f"🔍 model es dict con claves: {list(model_package['model'].keys())}")
+    
+    # Verificar la condición del if
+    is_ensemble_condition = model_package.get('is_ensemble', False)
+    print(f"🔍 Condición is_ensemble evalúa a: {is_ensemble_condition}")
+    
+    if is_ensemble_condition:
+        print("🎯 ENTRANDO AL BLOQUE DE ENSEMBLE")
+    else:
+        print("🤖 ENTRANDO AL BLOQUE DE MODELO NORMAL")
+    
+    # DETECTAR SI ES ENSEMBLE
+    if model_package.get('is_ensemble', False):
+        print("🎯 Detectado ENSEMBLE, usando predicción especial...")
+        
+        # Verificar que tiene los componentes necesarios
+        ensemble_components = model_package.get('model', {})
+        if not isinstance(ensemble_components, dict):
+            print("❌ Ensemble mal formateado")
+            return None
+        
+        # DETECTAR TIPO DE ENSEMBLE
+        ensemble_type = ensemble_components.get('ensemble_type', 'unknown')
+        print(f"🔍 Tipo de ensemble: {ensemble_type}")
+        
+        # CASO 1: ENSEMBLE CON FOLD_RESULTS (segundo script)
+        if 'fold_results' in ensemble_components:
+            print("🎯 Detectado ENSEMBLE con FOLD_RESULTS (group_voting)")
+            return predict_group_voting_ensemble(new_data, model_package)
+        
+        # CASO 2: ENSEMBLE CON INDIVIDUAL_MODELS (primer script)
+        elif 'individual_models' in ensemble_components:
+            print("🎯 Detectado ENSEMBLE con INDIVIDUAL_MODELS (voting/stacking)")
+            return predict_standard_ensemble(new_data, model_package)
+        
+        # CASO 3: ENSEMBLE DESCONOCIDO
+        else:
+            print("❌ Formato de ensemble no reconocido")
+            print(f"   Claves disponibles: {list(ensemble_components.keys())}")
+            return None
+    
+    else:
+        print("🤖 Detectado modelo NORMAL, usando predicción estándar...")
+        return predict_normal_model(new_data, model_package)
+
+def predict_group_voting_ensemble(new_data, model_package):
+    """
+    Predicción para ensemble con fold_results (segundo script)
+    """
+    print("🎯 Predicción GROUP VOTING ENSEMBLE...")
+    
+    ensemble_components = model_package['model']
+    fold_results = ensemble_components.get('fold_results', [])
+    
+    if not fold_results:
+        print("❌ No hay fold_results en el ensemble")
+        return None
+    
+    # Crear grupos si no existen
+    input_data_copy = new_data.copy()
+    if 'Exp_group' not in input_data_copy.columns or 'Age_group' not in input_data_copy.columns:
+        for idx, row in input_data_copy.iterrows():
+            exp_group, age_group = calculate_groups(
+                age=row['Age'], 
+                years_of_experience=row['Years_of_Experience'], 
+                grouping_info=model_package['grouping_info']
+            )
+            input_data_copy.at[idx, 'Exp_group'] = exp_group
+            input_data_copy.at[idx, 'Age_group'] = age_group
+    
+    # Crear features
+    X_features, _ = create_features_with_stats_pred(
+        input_data_copy,
+        all_job_categories=model_package['job_categories'],
+        all_seniority_levels=model_package['seniority_categories'],
+        stats_dict=model_package['stats_dict']
+    )
+    
+    # Usar el último fold para hacer predicciones (o el mejor fold)
+    last_fold = fold_results[-1]  # O puedes elegir el fold con mejor performance
+    individual_models = {name: res['model'] for name, res in last_fold['results'].items()}
+    scaler = last_fold.get('scaler', None)
+    
+    print(f"   🤖 Modelos en fold: {list(individual_models.keys())}")
+    
+    # Hacer predicciones con cada modelo del fold
+    predictions = []
+    
+    for name, model in individual_models.items():
+        try:
+            if name in ['Ridge', 'ElasticNet'] and scaler is not None:
+                X_scaled = scaler.transform(X_features)
+                pred = model.predict(X_scaled)
+            else:
+                pred = model.predict(X_features)
+            
+            predictions.append(pred[0] if len(pred) == 1 else pred)
+            
+        except Exception as e:
+            print(f"⚠️ Error prediciendo con {name}: {e}")
+            continue
+    
+    if not predictions:
+        print("❌ No se pudieron hacer predicciones con ningún modelo")
+        return None
+    
+    # Promedio simple (group voting)
+    final_prediction = np.mean(predictions)
+    
+    print(f"   💰 Predicción group voting: ${final_prediction:,.2f}")
+    print(f"   🤖 Modelos usados: {len(predictions)}")
+    
+    return final_prediction
+
+def predict_standard_ensemble(new_data, model_package):
+    """
+    Predicción para ensemble con individual_models (primer script)
+    """
+    print("🎯 Predicción STANDARD ENSEMBLE...")
+    
+    ensemble_components = model_package['model']
+    individual_models = ensemble_components.get('individual_models', {})
+    weights = ensemble_components.get('weights', None)
+    scaler = ensemble_components.get('scaler', None)
+    
+    if not individual_models:
+        print("❌ No hay modelos individuales en el ensemble")
+        return None
+    
+    # Crear grupos si no existen
+    input_data_copy = new_data.copy()
+    if 'Exp_group' not in input_data_copy.columns or 'Age_group' not in input_data_copy.columns:
+        for idx, row in input_data_copy.iterrows():
+            exp_group, age_group = calculate_groups(
+                age=row['Age'], 
+                years_of_experience=row['Years_of_Experience'], 
+                grouping_info=model_package['grouping_info']
+            )
+            input_data_copy.at[idx, 'Exp_group'] = exp_group
+            input_data_copy.at[idx, 'Age_group'] = age_group
+    
+    # Crear features
+    X_features, _ = create_features_with_stats_pred(
+        input_data_copy,
+        all_job_categories=model_package['job_categories'],
+        all_seniority_levels=model_package['seniority_categories'],
+        stats_dict=model_package['stats_dict']
+    )
+    
+    # Hacer predicciones con cada modelo individual
+    predictions = []
+    valid_weights = []
+    
+    for i, (name, model) in enumerate(individual_models.items()):
+        try:
+            if name in ['Ridge', 'ElasticNet'] and scaler is not None:
+                X_scaled = scaler.transform(X_features)
+                pred = model.predict(X_scaled)
+            else:
+                pred = model.predict(X_features)
+            
+            predictions.append(pred[0] if len(pred) == 1 else pred)
+            
+            # Agregar peso correspondiente
+            if weights is not None and i < len(weights):
+                valid_weights.append(weights[i])
+            
+        except Exception as e:
+            print(f"⚠️ Error prediciendo con {name}: {e}")
+            continue
+    
+    if not predictions:
+        print("❌ No se pudieron hacer predicciones con ningún modelo")
+        return None
+    
+    # Combinar predicciones
+    if valid_weights and len(valid_weights) == len(predictions):
+        # Usar pesos si están disponibles y coinciden
+        final_prediction = np.average(predictions, weights=valid_weights)
+    else:
+        # Promedio simple
+        final_prediction = np.mean(predictions)
+    
+    print(f"   💰 Predicción standard ensemble: ${final_prediction:,.2f}")
+    print(f"   🤖 Modelos usados: {len(predictions)}")
+    
+    return final_prediction
+
+def predict_normal_model(new_data, model_package):
+    """
+    Predicción para modelo normal (no ensemble)
+    """
+    print("🤖 Predicción MODELO NORMAL...")
+    
+    # VERIFICAR QUE model_package['model'] ES REALMENTE UN MODELO
+    actual_model = model_package.get('model')
+    if actual_model is None:
+        print("❌ No hay modelo en model_package")
+        return None
+    
+    # Verificar que es un modelo y no un diccionario
+    if isinstance(actual_model, dict):
+        print("❌ Error: model_package['model'] es un diccionario, no un modelo")
+        print(f"   Claves encontradas: {list(actual_model.keys())}")
+        return None
+    
+    # Verificar que tiene método predict
+    if not hasattr(actual_model, 'predict'):
+        print(f"❌ Error: El objeto no tiene método 'predict'. Tipo: {type(actual_model)}")
+        return None
+    
+    # Verificar que el modelo tiene features estadísticos
+    if not model_package.get('has_statistical_features', False):
+        print("⚠️  Este modelo no tiene features estadísticos")
+        print("❌ Función predict_salary_standard no implementada")
+        return None
+    
+    # Verificar dimensiones esperadas
+    expected_features = model_package.get('total_features')
+    if expected_features is None:
+        print("❌ Error: 'total_features' no encontrado en model_package")
+        return None
+        
+    print(f"   🔢 Features esperadas: {expected_features}")
+    
+    # Crear features usando la versión para un solo registro
+    try:
+        X_new, feature_names = create_features_with_stats_pred(
+            new_data,
+            all_job_categories=model_package['job_categories'],
+            all_seniority_levels=model_package['seniority_categories'],
+            stats_dict=model_package['stats_dict']
+        )
+    except Exception as e:
+        print(f"❌ Error creando features: {e}")
+        return None
+    
+    print(f"   🔢 Features generadas: {len(feature_names)}")
+    
+    # Verificar dimensiones
+    if len(feature_names) != expected_features:
+        print(f"   ⚠️  Ajustando dimensiones: {len(feature_names)} → {expected_features}")
+        
+        # Alinear con features del modelo
+        model_feature_names = model_package.get('feature_names', [])
+        if not model_feature_names:
+            print("❌ Error: 'feature_names' no encontrado en model_package")
+            return None
+            
+        X_aligned = pd.DataFrame(0, index=X_new.index, columns=model_feature_names)
+        
+        # Llenar con los valores disponibles
+        for col in X_new.columns:
+            if col in X_aligned.columns:
+                X_aligned[col] = X_new[col]
+        
+        X_new = X_aligned
+        print(f"   ✅ Dimensiones alineadas: {X_new.shape}")
+    
+    # Predecir
+    try:
+        prediction = actual_model.predict(X_new)[0]
+        
+        print(f"   💰 Predicción: ${prediction:,.2f}")
+        print(f"   ✅ Predicción exitosa con {X_new.shape[1]} features")
+        
+        return prediction
+        
+    except Exception as e:
+        print(f"❌ Error en predicción del modelo: {e}")
+        return None

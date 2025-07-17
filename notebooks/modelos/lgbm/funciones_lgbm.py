@@ -273,6 +273,36 @@ def create_features(data, all_job_categories=None, all_seniority_levels=None):
     features['age_experience_ratio'] = data['Age'] / (data['Years_of_Experience'] + 1)
     features['experience_squared'] = data['Years_of_Experience'] ** 2
     features['age_exp_interaction'] = data['Age'] * data['Years_of_Experience']
+    
+    features['low_exp_flag'] = (
+    data['Years_of_Experience'] <= 2
+    ).astype(int)
+    
+    
+    # Senior (corregir subestimaciones)
+    features['Age_senior'] = (data['Age_group'] == 'Senior').astype(int)
+    features['Exp_senior'] = (data['Exp_group'] == 'Senior').astype(int)
+    
+    features['All_senior_flag'] = (
+    (data['Exp_group'] == 'Senior') & (data['Age_group'] == 'Senior')
+    ).astype(int)
+    
+    features['All_junior_flag'] = (
+    (data['Exp_group'] == 'Junior') & (data['Age_group'] == 'Junior')
+    ).astype(int)
+    
+    
+    features['flag_senior_exp_interaction'] = features['All_senior_flag'] * data['Years_of_Experience']
+    features['flag_senior_age_squared'] = features['All_senior_flag'] * (data['Age'] ** 2)
+    features['flag_senior_exp_squared'] = features['All_senior_flag'] * (data['Years_of_Experience'] ** 2)
+    
+    #features['Exp_Range_Specific'] = pd.cut(
+    #data['Years_of_Experience'], 
+    #bins=[0, 3, 5, 7, 9, 12, 15, 20, 30], 
+    #labels=['0-3', '4-5', '6-7', '8-9', '10-12', '13-15', '16-20', '20+'],
+    #include_lowest=True
+    #)
+    
     features['senior_pro'] = ((data['Age'] > 45) & (data['Years_of_Experience'] > 15)).astype(int)
     #features['Age_group'] = data['Age_group'].astype('category')
     
@@ -314,6 +344,7 @@ def create_features(data, all_job_categories=None, all_seniority_levels=None):
     # ============= JOB TITLES - CARACTERÍSTICAS ORIGINALES =============
     job_title_lower = data['Job_Title'].str.lower().fillna('')
     
+    
     # Variables originales de job titles
     features['job_engineer'] = job_title_lower.str.contains('engineer', na=False).astype(int)
     features['job_manager'] = job_title_lower.str.contains('manager', na=False).astype(int)
@@ -321,8 +352,9 @@ def create_features(data, all_job_categories=None, all_seniority_levels=None):
     features['job_scientist'] = job_title_lower.str.contains('scientist', na=False).astype(int)
     features['job_senior'] = job_title_lower.str.contains('senior', na=False).astype(int)
     features['job_data'] = job_title_lower.str.contains('data', na=False).astype(int)
+    features['job_junior'] = job_title_lower.str.contains('junior', na=False).astype(int)
     
-    executive_titles = ['ceo', 'chief', 'director', 'president', 'founder']
+    executive_titles = ['ceo', 'chief', 'director', 'president', 'founder','executive']
     features['is_exec'] = job_title_lower.apply(
     lambda x: int(any(title in x for title in executive_titles))
     )
@@ -340,7 +372,7 @@ def create_features(data, all_job_categories=None, all_seniority_levels=None):
     def assign_job_category(title):
         """Asignar categoría principal"""
         title = title.lower()
-        if any(word in title for word in ['director', 'head', 'chief', 'vp']):
+        if any(word in title for word in ['director', 'head', 'chief', 'vp','executive']):
             return 'EXECUTIVE'
         elif any(word in title for word in ['manager', 'lead', 'supervisor']):
             return 'MANAGEMENT'
@@ -368,16 +400,17 @@ def create_features(data, all_job_categories=None, all_seniority_levels=None):
     def assign_seniority_level(title):
         """Asignar nivel de seniority"""
         title = title.lower()
-        if any(word in title for word in ['director', 'head', 'chief', 'vp']):
+        if any(word in title for word in ['director', 'head', 'chief', 'vp','executive']):
             return 'EXECUTIVE'
-        elif any(word in title for word in ['senior', 'lead', 'principal']):
+        elif any(word in title for word in ['senior', 'lead', 'principal','specialist']):
             return 'SENIOR'
-        elif any(word in title for word in ['manager', 'supervisor']):
+        elif any(word in title for word in ['manager', 'supervisor','coordinator']):
             return 'MANAGER'
         elif any(word in title for word in ['junior', 'entry', 'intern']):
             return 'JUNIOR'
         else:
             return 'MID'
+    
     
     # Aplicar categorizaciones
     job_categories = job_title_lower.apply(assign_job_category)
@@ -408,7 +441,7 @@ def create_features(data, all_job_categories=None, all_seniority_levels=None):
     ).astype(int)
     
     features['is_management_role'] = (seniority_levels.isin(['MANAGER', 'EXECUTIVE'])).astype(int)
-    features['is_senior_role'] = (seniority_levels.isin(['SENIOR', 'EXECUTIVE'])).astype(int)
+    features['is_senior_role'] = (seniority_levels.isin(['SENIOR'])).astype(int)
     
     # ============= FEATURES DE TEXTO DE DESCRIPTION =============
     if 'Description' in data.columns:
@@ -650,6 +683,26 @@ def create_statistical_features(data, stats_dict=None, is_training=True):
                 features.loc[idx, 'age_pct_vs_edu'] = 0
                 features.loc[idx, 'exp_pct_vs_edu'] = 0
     
+    """
+       ESTAS NO         
+    # Para capturar retornos no lineales en experiencia alta
+    features['Experience_Cubic'] = data['Years_of_Experience'] ** 3
+    features['Experience_Squared'] = data['Years_of_Experience'] ** 2
+    
+    features['Age_Cubic'] = data['Age'] ** 3
+    features['Age_Squared'] = data['Age'] ** 2
+    
+    # Interacción edad-experiencia cuadrática
+    features['Age_Experience_Squared'] = data['Age'] * (data['Years_of_Experience'] ** 2)
+    
+    # ============= 8. VARIABLES DE THRESHOLD =============
+    #print("🔧 Creando variables de threshold...")
+    
+    # Variables binarias para umbrales críticos
+    features['Experience_20_Plus'] = (data['Years_of_Experience'] >= 20).astype(int)
+    features['Age_45_Plus'] = (data['Age'] >= 45).astype(int)
+    features['Senior_Combo'] = features['Experience_20_Plus'] * features['Age_45_Plus']            
+    """
     # Features por Gender
     if 'gender_stats' in stats_dict:
         for idx, row in data.iterrows():
@@ -1054,3 +1107,102 @@ def create_comparison_chart(results):
     
 
 
+def analyze_predictions(results):
+    """Analizar calidad de predicciones"""
+    if not results:
+        print("❌ No hay resultados para analizar")
+        return None
+    
+    print("\n📈 Analizando predicciones...")
+    
+    best_name = results['best_model_name']
+    best_result = results['model_results'][best_name]
+    
+    y_test = results['y_test']
+    y_pred = best_result['predictions']
+    
+    # Crear DataFrame de análisis
+    analysis_df = pd.DataFrame({
+        'actual': y_test,
+        'predicted': y_pred,
+        'error': y_test - y_pred,
+        'abs_error': np.abs(y_test - y_pred),
+        'pct_error': np.abs(y_test - y_pred) / y_test * 100
+    })
+    
+    # Estadísticas
+    print(f"\nEstadísticas de Error ({best_name}):")
+    print(f"   Error promedio: ${analysis_df['error'].mean():,.2f}")
+    print(f"   Error absoluto promedio: ${analysis_df['abs_error'].mean():,.2f}")
+    print(f"   Error porcentual promedio: {analysis_df['pct_error'].mean():.1f}%")
+    print(f"   Predicciones dentro del ±10%: {(analysis_df['pct_error'] <= 10).mean()*100:.1f}%")
+    print(f"   Predicciones dentro del ±20%: {(analysis_df['pct_error'] <= 20).mean()*100:.1f}%")
+    
+    # Visualizaciones
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    
+    # 1. Actual vs Predicted
+    axes[0,0].scatter(analysis_df['actual'], analysis_df['predicted'], alpha=0.6)
+    min_val = min(analysis_df['actual'].min(), analysis_df['predicted'].min())
+    max_val = max(analysis_df['actual'].max(), analysis_df['predicted'].max())
+    axes[0,0].plot([min_val, max_val], [min_val, max_val], 'r--', lw=2)
+    axes[0,0].set_xlabel('Salario Real')
+    axes[0,0].set_ylabel('Salario Predicho')
+    axes[0,0].set_title('Real vs Predicho')
+    
+    # 2. Distribución de errores
+    axes[0,1].hist(analysis_df['error'], bins=20, alpha=0.7, edgecolor='black')
+    axes[0,1].axvline(x=0, color='red', linestyle='--')
+    axes[0,1].set_xlabel('Error (Real - Predicho)')
+    axes[0,1].set_ylabel('Frecuencia')
+    axes[0,1].set_title('Distribución de Errores')
+    
+    # 3. Error absoluto vs Salario real
+    axes[1,0].scatter(analysis_df['actual'], analysis_df['abs_error'], alpha=0.6)
+    axes[1,0].set_xlabel('Salario Real')
+    axes[1,0].set_ylabel('Error Absoluto')
+    axes[1,0].set_title('Error Absoluto vs Salario')
+    
+    # 4. Error porcentual
+    axes[1,1].hist(analysis_df['pct_error'], bins=20, alpha=0.7, color='green', edgecolor='black')
+    axes[1,1].set_xlabel('Error Porcentual (%)')
+    axes[1,1].set_ylabel('Frecuencia')
+    axes[1,1].set_title('Error Porcentual')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return 
+
+
+def analyze_feature_importance(X,feature_names,model):
+    """Analizar importancia de características"""
+    if not hasattr(model, 'feature_importances_'):
+        print("⚠️  El modelo no tiene feature_importances_")
+        return None
+    
+    print("\n🎯 Analizando importancia de características...")
+    
+    # Crear DataFrame de importancia
+    importance_df = pd.DataFrame({
+        'feature': feature_names,
+        'importance': model.feature_importances_
+    }).sort_values('importance', ascending=False)
+    
+    print("\nTOP 20 CARACTERÍSTICAS MÁS IMPORTANTES:")
+    for i, row in importance_df.head(20).iterrows():
+        print(f"   {row['feature']}: {row['importance']:.4f}")
+    
+    # Visualización
+    plt.figure(figsize=(12, 8))
+    top_15 = importance_df.head(20)
+    
+    plt.barh(range(len(top_15)), top_15['importance'])
+    plt.yticks(range(len(top_15)), top_15['feature'])
+    plt.xlabel('Importancia')
+    plt.title('Top 20 Características Más Importantes')
+    plt.gca().invert_yaxis()
+    plt.tight_layout()
+    plt.show()
+    
+    return importance_df

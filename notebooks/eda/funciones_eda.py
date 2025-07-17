@@ -330,6 +330,7 @@ def imputar_job_title(df, columna_job='Job Title', columna_descripcion='Descript
     
     Busca coincidencias entre los job titles existentes y el texto de la descripción,
     priorizando títulos más específicos cuando hay múltiples coincidencias posibles.
+    Considera contexto y no ignora palabras críticas cortas como 'UX', 'AI', etc.
     
     Parameters
     ----------
@@ -344,25 +345,6 @@ def imputar_job_title(df, columna_job='Job Title', columna_descripcion='Descript
     -------
     pandas.DataFrame
         DataFrame con los job titles imputados.
-    
-    Notes
-    -----
-    Algoritmo de coincidencia:
-    1. Divide cada job title en palabras clave
-    2. Busca estas palabras en la descripción
-    3. Calcula porcentaje de coincidencia por título
-    4. Prioriza títulos más específicos (más palabras) cuando hay empates
-    
-    Ejemplo: "director of operations" coincidirá mejor con "Operations Director" 
-    que con "Director" por mayor especificidad.
-    
-    Examples
-    --------
-    >>> df_imputado = imputar_job_title(df)
-    Ejemplos de decisiones:
-    ============================================================
-    'I work as director of operations with extensive...' → 'Operations Director'
-    'Business Intelligence Analyst with 5 years...' → 'Business Analyst'
     """
     job_titles_disponibles = df[columna_job].dropna().unique().tolist()
     
@@ -373,19 +355,56 @@ def imputar_job_title(df, columna_job='Job Title', columna_descripcion='Descript
         texto = str(descripcion).lower()
         candidatos = []
         
+        # Palabras críticas que no deben ignorarse aunque sean cortas
+        palabras_criticas = ['ux', 'ui', 'ai', 'bi', 'qa', 'it', 'hr', 'vp']
+        
         for job_title in job_titles_disponibles:
             palabras_job = job_title.lower().split()
             palabras_coincidentes = []
+            score_total = 0
             
             # Encontrar palabras que coinciden
             for palabra in palabras_job:
-                if len(palabra) > 2:  # Ignorar palabras cortas
-                    if re.search(rf'\b{re.escape(palabra)}\b', texto):
-                        palabras_coincidentes.append(palabra)
+                # No ignorar palabras críticas aunque sean cortas
+                if len(palabra) > 2 or palabra in palabras_criticas:
+                    matches = list(re.finditer(rf'\b{re.escape(palabra)}\b', texto))
+                    
+                    if matches:
+                        # Evaluar contexto para cada coincidencia
+                        mejor_score_palabra = 0
+                        
+                        for match in matches:
+                            # Obtener contexto (30 caracteres antes y después)
+                            start = max(0, match.start() - 30)
+                            end = min(len(texto), match.end() + 30)
+                            contexto = texto[start:end]
+                            
+                            score_contexto = 1.0  # Score base
+                            
+                            # Detectar autoidentificación (mayor peso)
+                            if any(pattern in contexto for pattern in ['i am', 'i work as', 'my role']):
+                                score_contexto += 1.0
+                            
+                            # Contexto negativo para palabras de jerarquía
+                            if palabra in ['junior', 'entry', 'intern', 'trainee']:
+                                if any(neg in contexto for neg in ['mentor', 'manage', 'lead', 'supervise']):
+                                    score_contexto = 0.1  # Muy bajo - es mentor DE juniors
+                            
+                            # Contexto positivo para roles senior
+                            elif palabra in ['senior', 'lead', 'principal', 'chief', 'director']:
+                                if any(pos in contexto for pos in ['i am', 'my role', 'current role']):
+                                    score_contexto += 0.5
+                            
+                            mejor_score_palabra = max(mejor_score_palabra, score_contexto)
+                        
+                        if mejor_score_palabra > 0.5:  # Umbral para considerar válido
+                            palabras_coincidentes.append(palabra)
+                            score_total += mejor_score_palabra
             
             # Calcular métricas de calidad
             if len(palabras_job) > 0 and len(palabras_coincidentes) > 0:
                 porcentaje_coincidencia = len(palabras_coincidentes) / len(palabras_job)
+                score_promedio = score_total / len(palabras_job)
                 
                 # Solo considerar si al menos 50% de las palabras coinciden
                 if porcentaje_coincidencia >= 0.5:
@@ -394,20 +413,23 @@ def imputar_job_title(df, columna_job='Job Title', columna_descripcion='Descript
                         'palabras_totales': len(palabras_job),
                         'palabras_coincidentes': len(palabras_coincidentes),
                         'porcentaje': porcentaje_coincidencia,
-                        'especificidad': len(palabras_job)  # Más palabras = más específico
+                        'score_contextual': score_promedio,
+                        'especificidad': len(palabras_job)
                     })
         
         if not candidatos:
             return None
         
-        # Ordenar por criterios de prioridad:
-        # 1. Porcentaje de coincidencia (descendente)
-        # 2. Especificidad/número de palabras (descendente) 
-        # 3. Palabras coincidentes absolutas (descendente)
+        # Ordenar por criterios de prioridad mejorados:
+        # 1. Score contextual (considera autoidentificación y contexto)
+        # 2. Porcentaje de coincidencia
+        # 3. Especificidad/número de palabras
+        # 4. Palabras coincidentes absolutas
         candidatos.sort(key=lambda x: (
-            x['porcentaje'],           # Prioridad 1: % coincidencia
-            x['especificidad'],        # Prioridad 2: más específico
-            x['palabras_coincidentes'] # Prioridad 3: más coincidencias
+            x['score_contextual'],     # Prioridad 1: score contextual
+            x['porcentaje'],           # Prioridad 2: % coincidencia
+            x['especificidad'],        # Prioridad 3: más específico
+            x['palabras_coincidentes'] # Prioridad 4: más coincidencias
         ), reverse=True)
         
         return candidatos[0]['job_title']
@@ -427,7 +449,7 @@ def imputar_job_title(df, columna_job='Job Title', columna_descripcion='Descript
             df_corregido.loc[idx, columna_job] = nuevo_job
             print(f"'{descripcion[:50]}...' → '{nuevo_job}'")
     
-    return df_corregido    
+    return df_corregido
 
 def crear_grafico_distribucion_avanzado(data, columna_salary='Salary', 
                                        maxbins=20, titulo=None, 
@@ -540,89 +562,105 @@ def crear_heatmap_correlacion(data, titulo='Matriz de Correlación',
         Ancho del gráfico en píxeles.
     alto : int, default=400
         Alto del gráfico en píxeles.
-    esquema_color : str, default='category10'
-        Esquema de colores de Altair ('category10', 'viridis', 'set1', etc.).
+    esquema_color : str, default='redblue'
+        Esquema de colores de Altair ('redblue', 'viridis', 'blueorange', etc.).
     
     Returns
     -------
     altair.Chart
-        Gráfico boxplot avanzado con capas opcionales.
+        Gráfico heatmap de correlación.
     
     Raises
     ------
     ValueError
-        Si las columnas especificadas no existen o no hay datos válidos.
+        Si no hay columnas numéricas o no hay datos válidos.
     
     Examples
     --------
-    >>> chart = crear_boxplot_avanzado(
-    ...     data, 'Education Level', 'Salary',
-    ...     mostrar_puntos=True, esquema_color='viridis'
+    >>> chart = crear_heatmap_correlacion(
+    ...     data, titulo='Correlaciones Dataset',
+    ...     esquema_color='viridis'
     ... )
     >>> chart.show()
     """
+    import altair as alt
+    import pandas as pd
+    import numpy as np
+    
+    # Seleccionar solo columnas numéricas
+    columnas_numericas = data.select_dtypes(include=[np.number]).columns.tolist()
+    
     # Validaciones
-    if columna_categorica not in data.columns:
-        raise ValueError(f"La columna '{columna_categorica}' no existe en el DataFrame")
+    if len(columnas_numericas) < 2:
+        raise ValueError("Se necesitan al menos 2 columnas numéricas para crear la matriz de correlación")
     
-    if columna_numerica not in data.columns:
-        raise ValueError(f"La columna '{columna_numerica}' no existe en el DataFrame")
+    # Filtrar datos válidos
+    df_numeric = data[columnas_numericas].dropna()
     
-    # Limpiar datos
-    df_clean = data.dropna(subset=[columna_categorica, columna_numerica])
+    if df_numeric.empty:
+        raise ValueError("No hay datos válidos en las columnas numéricas")
     
-    if df_clean.empty:
-        raise ValueError(f"No hay datos válidos")
+    # Calcular matriz de correlación
+    corr_matrix = df_numeric.corr()
     
-    # Título por defecto
-    if titulo is None:
-        titulo = f'Análisis de {columna_numerica} por {columna_categorica}'
+    # Convertir matriz a formato largo para Altair
+    corr_data = []
+    for i, var1 in enumerate(corr_matrix.columns):
+        for j, var2 in enumerate(corr_matrix.columns):
+            corr_data.append({
+                'Variable_1': var1,
+                'Variable_2': var2,
+                'Correlacion': corr_matrix.iloc[i, j],
+                'Correlacion_Abs': abs(corr_matrix.iloc[i, j]),
+                'x_pos': j,
+                'y_pos': len(corr_matrix.columns) - i - 1  # Invertir Y para visualización correcta
+            })
     
-    # Base chart
-    base = alt.Chart(df_clean)
+    df_corr = pd.DataFrame(corr_data)
     
-    # Boxplot principal
-    boxplot = base.mark_boxplot(
-        extent='min-max' if mostrar_outliers else 'ci',
-        size=60
-    ).encode(
-        alt.X(f'{columna_categorica}:N', 
-              title=columna_categorica,
-              axis=alt.Axis(labelAngle=-45, labelFontSize=11)),
-        alt.Y(f'{columna_numerica}:Q', 
-              title=columna_numerica,
-              axis=alt.Axis(format='.0f')),
-        alt.Color(f'{columna_categorica}:N',
-                  scale=alt.Scale(scheme=esquema_color),
+    # Crear heatmap base
+    heatmap = alt.Chart(df_corr).mark_rect().encode(
+        alt.X('Variable_1:O', 
+              title='Variables',
+              axis=alt.Axis(labelAngle=-45, labelFontSize=10)),
+        alt.Y('Variable_2:O', 
+              title='Variables',
+              axis=alt.Axis(labelFontSize=10)),
+        alt.Color('Correlacion:Q',
+                  scale=alt.Scale(
+                      scheme=esquema_color,
+                      domain=[-1, 1]
+                  ),
                   legend=alt.Legend(
-                      title=columna_categorica,
-                      orient='right'
+                      title='Correlación',
+                      orient='right',
+                      gradientLength=200
                   )),
         tooltip=[
-            alt.Tooltip(f'{columna_categorica}:N', title='Categoría'),
-            alt.Tooltip(f'{columna_numerica}:Q', title='Valor', format='.0f')
+            alt.Tooltip('Variable_1:O', title='Variable 1'),
+            alt.Tooltip('Variable_2:O', title='Variable 2'),
+            alt.Tooltip('Correlacion:Q', title='Correlación', format='.3f')
         ]
     )
     
-    # Capas adicionales
-    layers = [boxplot]
-    
-    # Agregar puntos si se solicita
-    if mostrar_puntos:
-        points = base.mark_circle(
-            opacity=0.3,
-            size=30
-        ).encode(
-            alt.X(f'{columna_categorica}:N'),
-            alt.Y(f'{columna_numerica}:Q'),
-            alt.Color(f'{columna_categorica}:N',
-                      scale=alt.Scale(scheme=esquema_color),
-                      legend=None)
+    # Agregar texto con valores de correlación
+    text = alt.Chart(df_corr).mark_text(
+        fontSize=9,
+        fontWeight='bold',
+        color='white'
+    ).encode(
+        alt.X('Variable_1:O'),
+        alt.Y('Variable_2:O'),
+        text=alt.Text('Correlacion:Q', format='.2f'),
+        opacity=alt.condition(
+            alt.datum.Correlacion_Abs > 0.1,  # Solo mostrar texto si correlación > 0.1
+            alt.value(1.0),
+            alt.value(0.0)
         )
-        layers.append(points)
+    )
     
-    # Combinar capas
-    chart = alt.layer(*layers).resolve_scale(
+    # Combinar heatmap y texto
+    chart = (heatmap + text).resolve_scale(
         color='independent'
     ).properties(
         title=alt.TitleParams(
